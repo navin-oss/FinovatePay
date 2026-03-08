@@ -15,6 +15,9 @@ async function financeInvoice(invoiceHash, tokenId, sellerAddress, amount) {
     const client = await pool.connect();
 
     try {
+        // Start transaction
+        await client.query('BEGIN');
+
         // 1. Validate & Fetch Invoice Details
         const invoiceQuery = `
             SELECT * FROM invoices
@@ -24,7 +27,8 @@ async function financeInvoice(invoiceHash, tokenId, sellerAddress, amount) {
 
         if (result.rows.length === 0) {
             console.error(`[Financing Service] Invoice not found: ${invoiceHash}`);
-            return;
+            await client.query('ROLLBACK');
+            throw new Error("Invoice not found");
         }
 
         const invoice = result.rows[0];
@@ -32,12 +36,14 @@ async function financeInvoice(invoiceHash, tokenId, sellerAddress, amount) {
         // Idempotency Check
         if (invoice.financing_status === 'financed') {
             console.warn(`[Financing Service] Invoice ${invoiceHash} is already financed. Skipping.`);
+            await client.query('ROLLBACK');
             return;
         }
 
         // Use seller address from DB if not provided
         const seller = sellerAddress || invoice.seller_address;
         if (!seller) {
+            await client.query('ROLLBACK');
             throw new Error("Seller address missing for invoice.");
         }
 
@@ -46,6 +52,7 @@ async function financeInvoice(invoiceHash, tokenId, sellerAddress, amount) {
         // 2. Request Liquidity from Katana
         const liquidity = await katanaService.requestLiquidity(amount);
         if (!liquidity.success) {
+            await client.query('ROLLBACK');
             throw new Error("Katana liquidity request failed.");
         }
 
@@ -80,6 +87,9 @@ async function financeInvoice(invoiceHash, tokenId, sellerAddress, amount) {
             await client.query(fallbackQuery, [invoiceHash]);
         }
 
+        // Commit transaction
+        await client.query('COMMIT');
+
         console.log(`[Financing Service] ✅ Invoice ${invoiceHash} successfully financed!`);
         console.log(`[Financing Service] Seller paid: ${bridgeReceipt.amount} (Tx: ${bridgeReceipt.txHash})`);
 
@@ -94,6 +104,12 @@ async function financeInvoice(invoiceHash, tokenId, sellerAddress, amount) {
 
     } catch (error) {
         console.error(`[Financing Service] ❌ Financing failed for Invoice ${invoiceHash}:`, error);
+        // Ensure rollback on error if transaction was started
+        try {
+            await client.query('ROLLBACK');
+        } catch (rollbackError) {
+            console.error('[Financing Service] Rollback failed:', rollbackError.message);
+        }
         // Optional: Update status to 'failed' or 'retry_needed'
         // await client.query("UPDATE invoices SET financing_status = 'failed' WHERE invoice_hash = $1", [invoiceHash]);
         throw error;

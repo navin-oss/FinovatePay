@@ -201,10 +201,17 @@ exports.checkCompliance = async (req, res) => {
   try {
     const { walletAddress } = req.body;
     
+    if (!walletAddress) {
+      return errorResponse(res, 'Wallet address is required', 400);
+    }
+    
+    // Convert to lowercase for consistent lookup (matching kycService.js behavior)
+    const normalizedWallet = walletAddress.toLowerCase();
+    
     // Check if wallet is flagged
     const result = await pool.query(
-      'SELECT kyc_status, kyc_risk_level FROM users WHERE wallet_address = $1',
-      [walletAddress]
+      'SELECT kyc_status, kyc_risk_level FROM users WHERE LOWER(wallet_address) = $1',
+      [normalizedWallet]
     );
     
     if (result.rows.length === 0) {

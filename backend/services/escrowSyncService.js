@@ -84,7 +84,17 @@ const startSyncWorker = () => {
 
       const invChunks = chunkArray(invoices, CONCURRENCY);
       for (const chunk of invChunks) {
-        await Promise.all(chunk.map(inv => syncInvoiceStatus(inv.invoice_id)));
+        // Wrap each syncInvoiceStatus call with error handling to prevent unhandled rejections
+        const safeSync = async (invoiceId) => {
+          try {
+            await syncInvoiceStatus(invoiceId);
+          } catch (error) {
+            console.error(`Failed to sync invoice ${invoiceId}:`, error.message);
+            // Continue processing other invoices - don't let one failure stop the batch
+          }
+        };
+        
+        await Promise.all(chunk.map(inv => safeSync(inv.invoice_id)));
       }
     } catch (err) {
       console.error('Worker Error:', err);

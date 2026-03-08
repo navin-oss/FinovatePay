@@ -24,6 +24,26 @@ exports.raiseDispute = async (req, res) => {
   const { reason } = req.body;
   const user = req.user; // Assuming auth middleware populates this
 
+  // Validate invoiceId is a valid UUID format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!invoiceId || !uuidRegex.test(invoiceId)) {
+    return errorResponse(res, 'Invalid invoice ID format. Must be a valid UUID.', 400);
+  }
+
+  // Validate reason field
+  if (!reason || typeof reason !== 'string') {
+    return errorResponse(res, 'Dispute reason is required and must be a string', 400);
+  }
+
+  // Trim and validate reason length (max 1000 characters)
+  const sanitizedReason = reason.trim();
+  if (sanitizedReason.length < 10 || sanitizedReason.length > 1000) {
+    return errorResponse(res, 'Dispute reason must be between 10 and 1000 characters', 400);
+  }
+
+  // Sanitize reason to prevent XSS (basic HTML tag removal)
+  const cleanReason = sanitizedReason.replace(/<[^>]*>/g, '');
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -37,18 +57,18 @@ exports.raiseDispute = async (req, res) => {
     // Create the dispute
     await client.query(
       'INSERT INTO disputes (invoice_id, status, resolution_note) VALUES ($1, $2, $3)',
-      [invoiceId, 'open', reason]
+      [invoiceId, 'open', cleanReason]
     );
 
     // Add log entry
-    await createLog(client, invoiceId, 'Dispute Raised', user.email, reason);
+    await createLog(client, invoiceId, 'Dispute Raised', user.email, cleanReason);
 
     await client.query('COMMIT');
 
     // Notify via Socket.io
     const io = req.app.get('io');
     if (io) {
-        io.to(`invoice-${invoiceId}`).emit('dispute-updated', { type: 'RAISED', invoiceId, reason });
+        io.to(`invoice-${invoiceId}`).emit('dispute-updated', { type: 'RAISED', invoiceId, reason: cleanReason });
     }
 
     res.json({ success: true, message: 'Dispute raised successfully' });
