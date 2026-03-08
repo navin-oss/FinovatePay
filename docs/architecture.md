@@ -1,0 +1,60 @@
+# FinovatePay Architecture
+
+## Overview
+FinovatePay is a hybrid payment rail for B2B payments that combines off-chain UX with on-chain settlement, escrow, and compliance.
+
+## System Architecture
+
+### Components
+1. **Frontend**: React application with wallet integration
+2. **Backend**: Node.js/Express API server with Socket.IO for real-time updates
+3. **Database**: PostgreSQL for storing application data
+4. **Blockchain**: Polygon for smart contracts
+5. **Storage**: IPFS/S3 for document storage
+
+### Smart Contracts
+1. **EscrowContract**: Handles payment escrow and dispute resolution
+2. **ComplianceManager**: Manages KYC status and account freezing
+3. **FractionToken**: ERC-1155 for tokenizing invoices (optional v2)
+
+### Data Flow
+1. Seller creates invoice → stored in DB with hash recorded on-chain
+2. Buyer pays invoice → funds locked in escrow contract
+3. Both parties confirm → escrow releases funds to seller
+4. Dispute raised → multisig/arbitrator resolves with evidence
+5. Invoice financing → investors buy fractional tokens representing invoice value
+
+### Security Considerations
+- KYC/AML mandatory for all financial operations
+- Multisig and timelocks for admin actions
+- Sensitive documents stored off-chain, only hashes on-chain
+- Regular smart contract audits
+
+### Compliance Features
+- Integration with third-party KYC providers
+- Wallet address mapping to compliance status
+- Admin ability to freeze suspicious accounts
+- All actions produce auditable on-chain receipts
+
+### Monetization
+- Transaction fees (0.1-0.5%)
+- Subscription for marketplaces
+- Spread on invoice financing
+- Premium compliance services
+
+## Deployment
+- Frontend: Vercel/Netlify
+- Backend: AWS/Azure/Google Cloud
+- Database: Managed PostgreSQL (AWS RDS, Google Cloud SQL)
+- Blockchain: Polygon Amoy testnet initially, then mainnet
+- Storage: IPFS cluster or S3-compatible storage
+
+---
+
+## Phase 2: Scaling with Polygon CDK
+
+To evolve from "Launch to Fundraising," our long-term architecture will leverage the full Polygon stack for mass adoption.
+
+-   **Polygon CDK:** FinovatePay will be migrated to its own purpose-built L2, created with the Polygon CDK. This provides granular control over gas fees (e.g., enabling gasless transactions for merchants) and allows for chain-level compliance features.
+-   **Polygon AggLayer:** Our CDK chain will be connected to the AggLayer, ensuring unified liquidity and composability with other chains in the Polygon ecosystem (including Polygon PoS, zkEVM, and other L1s/L2s).
+-   **Katana Liquidity:** We will integrate with Katana via the **WaltBridge**. This allows our RWA-backed invoice financing to tap into Katana's deep DeFi liquidity, providing instant, low-slippage financing for our users.
